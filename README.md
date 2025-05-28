@@ -8,13 +8,13 @@ Change the main function for each project. That is, chatroom.c for 1A, testsysca
     chatroom.c
 
 # Project 1B Documentation:
-This documentation contains three main notes: Kernel Side, User Side, and Implementation note. Kernel Side and User Side notes briefly explains, in my word, what fields and variables (both local and global) are needed to include in files apart from the main implementation file (i.e. sysproc.c) so that the whole program runs properly. Therefore, these two notes contain describpitons similar to the ones stated in the project specification. If you need not to read them, please do skip to the Implemenation part which contains the major idea of the four newly added system call handlers.
+This documentation contains three main notes: `Kernel Side`, `User Side`, and `Implementation` note. `Kernel Side` and `User Side` notes briefly explains what fields and variables (both local and global) are needed to include in files apart from the main `implementation` file (i.e. sysproc.c) so that the whole program runs properly. If you need not to read them, please skip to the Implemenation part which contains the major idea of the four newly added system call handlers.
 
 ### Kernel Side
 
 #### kernel/syscall.h file
 Addition of unique identifier for four new system calls.
-These ids will help maintain the mapping `*syscalls[]` contiguous and clean
+Each unique number will be an ID for each system call mapping to an entry in an array called `*syscalls[]` which stores all executable system calls implemented in xv6-kernel.
 
 Line 29-32:
 
@@ -25,54 +25,71 @@ Line 29-32:
 
 #### kernel/syscall.c file
 
-Addition of prototypes defined above in `kernel/syscall.h`
+- Addition of prototypes defined above
 
-Line 105-109:
+    Line 106-109:
 
-    extern uint64 sys_getppid(void);
-    extern uint64 sys_getcpids(void);
-    extern uint64 sys_getpaddr(void);
-    extern uint64 sys_gettraphistory(void);
+        extern uint64 sys_getppid(void);
+        extern uint64 sys_getcpids(void);
+        extern uint64 sys_getpaddr(void);
+        extern uint64 sys_gettraphistory(void);
     
-Addition of pointers to new system call handlers in a syscalls array. This ensures the mapping between system calls and their uniqu numbers.
+- Addition of pointers to new system call handlers in the `*syscalls[]` array. This ensures the mapping between system calls and their IDs.
 
-Line 144-147:
+    Line 144-147:
 
-    [SYS_getppid] sys_getppid,
-    [SYS_getcpids] sys_getcpids,
-    [SYS_getpaddr] sys_getpaddr,
-    [SYS_gettraphistory] sys_gettraphistory,
+        [SYS_getppid] sys_getppid,
+        [SYS_getcpids] sys_getcpids,
+        [SYS_getpaddr] sys_getpaddr,
+        [SYS_gettraphistory] sys_gettraphistory,
+
+- Existing functions that deals with argument passing in a system call
+
+    Line 56-60: Fetch the nth 32-bit system call argument.
+
+        void argint(int n, int *ip) {
+            *ip = argraw(n);
+        }
+
+    Line 65-69: Retrieve an argument as a pointer. Doesn't check for legality, since copyin/copyout will do that.
+
+        void argaddr(int n, uint64 *ip) {
+            *ip = argraw(n);
+        }
 
 
 #### kernel/sysproc.c file
 
-The implementation of new system call handlers. Arguments are not passed in since they are stored in stack pointers when a callee sets them. See `argaddr()` and `argint()`.
+The implementation of new system call handlers. Arguments are not passed in since they are stored in stack pointers when a callee sets them. Stack variables are restored by `argaddr()` and `argint()` funcitons. See them in **kernel/syscall.c file** in **Kernel Side**.
 
-Line 99-102: the handler for system call getppid
+- Line 99-102: the handler for system call getppid
     
         sys_getppid(void)
 
-Line 105-136: the handler for system call getcpids
+- Line 105-136: the handler for system call getcpids
 
         sys_getcpids(void)
 
-Line 139-156: the handler for system call getpaddr
+- Line 139-156: the handler for system call getpaddr
 
         sys_getpaddr(void)
 
-Line 159-180: the handler for system call gettraphistory
+- Line 159-180: the handler for system call gettraphistory
 
         sys_gettraphistory(void)
 
 #### kernel/proc.h file
-Added a global array containing all the processes' PCBs so it can be accessed from multiple places. 
+- Addition of a global array containing all the process control blocks (PCBs), which is essentially a structure called `PCB`, so it can be accessed by a currently running process with `myproc()` function.
 
-Line 115:
+    Line 120:
 
         extern struct proc proc[NPROC]
 
 
-In struct proc (PCB), add trap fields to handle all the history of trap events. This is discussed in (4)sys_gettraphistory with more details.
+- Addition of trap fields to handle all the history of trap events in the structure `proc` (PCB). The details are explained in **(4)**`sys_gettraphistory` in **Imepentation** note.
+  
+    Line 108-111:
+
         int trapcount
         int syscallcount
         int devintcount
@@ -81,24 +98,41 @@ In struct proc (PCB), add trap fields to handle all the history of trap events. 
 ### User Side
 
 #### user/usys.pl file
-Entries to integrate with the kernel. Assembly codes are genereated by this file
+Perl script file to generate the mapped system calls in an assembly language. Addition of system call entries to integrate with the kernel side.
 
-Line 41-44
+Line 41-44:
+
+    entry("getppid");
+    entry("getcpids");
+    entry("getpaddr");
+    entry("gettraphistory");
 
 #### user/user.h file 
 
+System call declarations which are function interfaces for user programs. You can specifty aruments in here. Although they take arguments, they push those arguments to stack pointers which are handled by `argaddr()` and `argint()`, so the corresponding system calls will disregard the argument variables upon being called.
+
 Line 29-32:
 
-System call declarations which are function interfaces for user programs so they take some arguments and pass them to system call handlers.
+    int getppid(void);
+    int getcpids(int *cpids, int max);
+    int getpaddr(void *va);
+    int gettraphistory(int *trapcount, int *syscallcount, int *devintcount, 
+                       int *timerintcount);
+
+
+
 
 ### Implementation
 #### kernel/sysproc.c file
-(1) sys_getppid(): (line 97-100)
-    Using myproc() function, it can retrieve a pointer structure that is a currently running process' PCB.
-    The system call simply returns the pid value obtained from the field in the PCB's parent which is also a pointer.
+**(1)** Line 99-102: `sys_getppid()` 
 
-(2) sys_getcpids(): (line 103-131)
-    Since the system call for user program, corresponding to this handler, has two arguments, this handler first retrieves those from kernel stack and record them in local variables, cparray and nmax.
+This syscall call simply returns the ID of the calling process' parent process.
+
+Using `myproc()` function, it can retrieve a pointer structure that is a currently running process' PCB. Returns the pid value obtained from the field in the PCB's parent which is also a pointer.
+
+**(2)** Line 105-136: `sys_getcpids()`
+
+Since the system call for user program, corresponding to this handler, has two arguments, this handler first retrieves those from kernel stack and record them in local variables, cparray and nmax.
 
     uint64 cparray - A variable that will hold an address of the first argument (int *cpids)
     int nmax - will hold the second argument address (int max)
@@ -114,7 +148,8 @@ The for loop runs the nmax numer of times.
 
 Returns the number of child processes in the array.
 
-(3) sys_getpaddr():
+**(3)** Line 139-156: `sys_getpaddr()`
+
 Simlar to sys_getcpids(), first obtain arguments from the kernel stack: (void *paddr).
 Since this handler deals with the translation of address, it needs:
 
@@ -133,7 +168,7 @@ Using the given function
                     Page Size:   12KB
                     Offset mask: 0xfff
 
-(4) sys_gettraphistory():
+**(4)** Line 159-180: `sys_gettraphistory()`
 
 The life cycle of PCB will be reused even after its termination. So it is reasonable to initialize trap fields each time this happens. The freeproc(...) function in kernel/proc.c manages the memory of used PCB.
         
@@ -156,7 +191,7 @@ Using the same strategy as in sys_getcpids, we copy out all the four cases using
 
 
 # Project 1C Documentation:
-    This documentation contains three main notes: Kernel Side, User Side, and Implementation note. Kernel Side and User Side notes briefly explains what fields and variables (both local and global) are needed to include in files apart from the main implementation file (i.e. sysproc.c) so that the whole program runs properly. Therefore, these two notes contain describpitons similar to the ones stated in the project specification. If you need not to read them, please do skip to the Implemenation part which contains the major idea of the four newly added system call handlers.
+This documentation contains three main notes: Kernel Side, User Side, and Implementation note. Kernel Side and User Side notes briefly explains what fields and variables (both local and global) are needed to include in files apart from the main implementation file (i.e. sysproc.c) so that the whole program runs properly. Therefore, these two notes contain describpitons similar to the ones stated in the project specification. If you need not to read them, please do skip to the Implemenation part which contains the major idea of the four newly added system call handlers.
 
 ### Kernel Side
 In kernel/proc.h, important field values: (line: 114-116)
