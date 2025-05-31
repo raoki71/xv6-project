@@ -8,6 +8,9 @@ Change the main function for each project. That is, chatroom.c for 1A, testsysca
     chatroom.c
 
 # Project 1B Documentation:
+#### Learning Objective: 
+<ins>To get familiar with the process data structure and its management, memory address translation, and trap handling. </ins>
+
 This documentation contains three main notes: `Kernel Side`, `User Side`, and `Implementation` note. `Kernel Side` and `User Side` notes briefly explains what fields and variables (both local and global) are needed to include in files apart from the main `implementation` file (i.e. sysproc.c) so that the whole program runs properly. If you need not to read them, please skip to the Implemenation part which contains the major idea of the four newly added system call handlers.
 
 ### Kernel Side
@@ -126,68 +129,68 @@ Line 29-32:
 #### kernel/sysproc.c file
 **(1)** Line 99-102: `sys_getppid()` 
 
-This syscall call simply returns the ID of the calling process' parent process.
-
-Using `myproc()` function, it can retrieve a pointer structure that is a currently running process' PCB. Returns the pid value obtained from the field in the PCB's parent which is also a pointer.
+This syscall call simply returns the ID of the calling process' parent process. Using `myproc()` function, it can retrieve a pointer structure that is a currently running process' PCB. Returns the pid value obtained from the field in the PCB's parent which is also a pointer.
 
 **(2)** Line 105-136: `sys_getcpids()`
 
-Since the system call for user program, corresponding to this handler, has two arguments, this handler first retrieves those from kernel stack and record them in local variables, cparray and nmax.
+This system call returns the number (up to max) of child
+processes of the calling process. Since the system call for user program, corresponding to this handler, has two arguments, the handler first retrieves those from kernel stack and record them in local variables, cparray and nmax.
 
-    uint64 cparray - A variable that will hold an address of the first argument (int *cpids)
-    int nmax - will hold the second argument address (int max)
+    uint64 cparray - A variable that will hold an address of the first argument
+                    (int *cpids)
+    int nmax - A variable that will hold the second argument address (int max)
 
 We are interested in returning the number of all the processes children to a common parent process.
     
     int nchild - the number of all child processes
 
-The for loop runs the nmax numer of times.
-    At each index i, it checks whether the global PCB array, proc[i] is a child of some parents, that is proc[i] iteself should not be a root.
-    Once it gets the pid which is child to some parent, it checks whether the parent is the pid of the currently running process.
-    If so, it copy out all the necessary data (PCB) and aquired cpid into a given virtual address. This virtual address is partitioned into the size of (32-bit int), each containing the value of cpid with the j number of children having the common parent.
-
-Returns the number of child processes in the array.
+The for loop runs the `nmax` numer of times. At each index i, it checks whether the global PCB array, `proc[i]` is a child of some parents; (i.e.) `proc[i]` iteself should not be a root. Once it gets the child pid, it checks whether the parent of the child process has the pid of the currently running process. If so, it copies out all the necessary data (PCB) and aquires cpid into a given virtual address. This virtual address is partitioned into the size of (32-bit int), each containing the value of cpid with the `j` number of children having the common parent.
 
 **(3)** Line 139-156: `sys_getpaddr()`
 
-Simlar to sys_getcpids(), first obtain arguments from the kernel stack: (void *paddr).
-Since this handler deals with the translation of address, it needs:
+This system call translates the given virtual address into its corresponding physical address and returns the physical address. Simlar to sys_getcpids(), first obtain arguments from the kernel stack: `void *paddr`. In xv6-riscv, memory is based on a paging system. Since this handler deals with the translation of address, it needs:
 
         VirtAddr - a source address pointer
         PhysAddr - a destination address pointer which is a physical address
 
-Once it gets the virtual address, it then finds its corresponding page table entry using walk(pagetable_t pagetable, uint64 va, int alloc).
-Using the valid bit, it can tell that it is safe to retrieve a page entry.
+Once it gets the virtual address, it then finds its corresponding page table entry using the function `walk(pagetable_t pagetable, uint64 va, int alloc)`.
+Then, using the valid bit, it tells that it is safe to retrieve a page entry.
     
     If valid = 0, return 0
     If valid = 1, address translation as in the following:
 
-Using the given function 
+Using the given function, the address translation is carried out:
     
+    //the PTE pointed to by pte is a valid page entry (Page Size: 12KB, Offset mask: 0xfff)
+
     PhysAddr = PTE2PA(*pte) | (VirtAddr & 0xFFF) 
-                    Page Size:   12KB
-                    Offset mask: 0xfff
 
 **(4)** Line 159-180: `sys_gettraphistory()`
 
-The life cycle of PCB will be reused even after its termination. So it is reasonable to initialize trap fields each time this happens. The freeproc(...) function in kernel/proc.c manages the memory of used PCB.
+This system call returns statistics regarding the trap/interrupt history. It returns the following data:
+- `trapcount`: the total number of times that the calling process has
+trapped or been interrupted.
+- `syscallcount`: the total number of times that the system call has trapped or been interrupted.
+- `devintcount`: the total number of times that it has trapped or been interrupted by device interrupt.
+- `timerintcount`: the number of times that it has trapped or been interrupted by timer interrupt (CPU quanta).
+
+The life cycle of PCB will be reused even after its termination. So it is reasonable to initialize trap fields each time this happens. The `freeproc(...)` function in `kernel/proc.c` manages the memory of used PCB.
         
         freeproc(struct proc *p) {
-            ...
+            //...
             p->trapcount = 0;
             p->syscallcount = 0;
             p->devintcount = 0;
             p->timerintcount = 0;
         }
-Mainly, the function usertrap(void) in kernel/trap.c handles all the system calls, exceptions and interrupt events. Here, it counts all the necessary trap event occurrences.
+Mainly, the function `usertrap(void)` in `kernel/trap.c` handles all the system calls (i.e.exceptions and interrupt events). Here, it counts all the necessary trap event occurrences.
 
-        p->trapcount++     when the current process structure is retrieved
-        p->syscallcount++  when the new system call is called
-        p->devintcount++   when hardware/device interrupts occur
-        p->timerintcount++ when the timer (quanta) interrupts occur
+        p->trapcount++     //when the current process structure is retrieved
+        p->syscallcount++  //when the new system call is called
+        p->devintcount++   //when hardware/device interrupts occur
+        p->timerintcount++ //when the timer (quanta) interrupts occur
     
-In our implementation, all the four fields are assigned to corresponding virtual addresses passed as arguments in gettraphistory(...).
-Using the same strategy as in sys_getcpids, we copy out all the four cases using copyout(...) function.
+In our implementation, all the four fields are assigned to corresponding virtual addresses passed in as arguments. Using the same strategy as in sys_getcpids, it copies out all the four cases.
 
 
 # Project 1C Documentation:
