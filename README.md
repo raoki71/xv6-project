@@ -5,11 +5,16 @@ Change the main function for each project. That is, chatroom.c for 1A, testsysca
 @author Rei Aoki
 
 # Project 1A Documentation:
-    chatroom.c
+#### Learning Objective:
+<ins>To get familiar with xv6-riscv and develop user application by calling/handling system calls.</ins>
+   
+The chatroom program supports upto 5 users who can chat to a next user by saying some words. The chat window is switched by typing `:CHANGE` or `:change`. The messages are transffered by `pipe()` system call present in xv6-riscv kernel. The whole chat program can be terminate by typing `:EXIT` or `:exit`.
+
+The documentation for the project is too simple so the code comments are left in `chatroom.c` file from `line 62-191`.
 
 # Project 1B Documentation:
 #### Learning Objective: 
-<ins>To get familiar with the process data structure and its management, memory address translation, and trap handling. </ins>
+<ins>To understand the process data structure and its management, memory address translation, and trap handling. </ins>
 
 This documentation contains three main notes: `Kernel Side`, `User Side`, and `Implementation` note. `Kernel Side` and `User Side` notes briefly explains what fields and variables (both local and global) are needed to include in files apart from the main `implementation` file (i.e. sysproc.c) so that the whole program runs properly. If you need not to read them, please skip to the Implemenation part which contains the major idea of the four newly added system call handlers.
 
