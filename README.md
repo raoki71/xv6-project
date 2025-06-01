@@ -1,6 +1,13 @@
 # xv6-project
-xv6-riscv project partitioned into three major parts: chatroom implementation, virtual address space, and Completely Fair Scheduler
-Change the main function for each project. That is, chatroom.c for 1A, testsyscall_b for 1B, and testsyscall_c for 1C. Also, change the Makefil accordinly for each case.
+xv6-riscv project is partitioned into three major parts: user program implementation (chatroom), virtual address space management, and Completely Fair Scheduler (CFS) implementation.
+
+Note that Makefile needs to be changed accordinly for each project: 
+
+Line 142:
+    
+    $U/_chatroom\           // for Project 1A
+    $U/_testsyscall_b\      // for Project 1B
+    $U/_testsyscall_c\      // for Project 1C
 
 @author Rei Aoki
 
