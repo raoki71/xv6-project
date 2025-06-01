@@ -118,3 +118,14 @@ struct proc {
 
 // Global array containing all the processes' PCBs.
 extern struct proc proc[NPROC];
+
+//
+// Project 1C
+//
+extern int cfs_sched_latency;
+extern int cfs_max_timeslice;
+extern int cfs_min_timeslice;
+extern int cfs;
+extern struct proc *cfs_current_proc;
+extern int cfs_proc_timeslice_len;
+extern int cfs_proc_timeslice_left;

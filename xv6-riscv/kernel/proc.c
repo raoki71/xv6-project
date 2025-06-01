@@ -44,7 +44,7 @@ int nice_to_weight[40] = {
   36, 29, 23, 18, 15, /*for nice = 15, …, 19*/
   };
 
-  //indicate if the fair scheduler is the current scheduler, 0 is the default setting indicates that the current scheduler is the default RR scheduler 
+  //indicate if the fair scheduler is the current scheduler, 0 is the default setting indicatingd that the current scheduler is the default RR scheduler 
   //while 1 indicates the current scheduler is this fair scheduler
   int cfs = 0;
   //the process currently scheduled to run by the fair scheduler and is initialized to 0 meaning there is no such process
@@ -479,12 +479,36 @@ wait(uint64 addr)
 int weight_sum(){
   //to add: compute the sum of the weights of all the RUNNABLE processes,
   //and return the sum
-  return 0;
+  int total_weight = 0;
+  for(int i=0; i<NPROC;i++) {
+    if(proc[i].state==RUNNABLE) {
+      int id = proc[i].nice + 20;
+      total_weight += nice_to_weight[id];
+    }
+  }
+  return total_weight;
 }
 struct proc* shortest_runtime_proc(){
   //to add: find the RUNNABLE process that has the shortest vruntime and return it.
-  //If no process is RUNNABLE, return 0.  
-  return 0;
+  //If no process is RUNNABLE, return 0.
+  struct proc* min_runtime_p = 0;
+  int flag = 0;
+  int min_vruntime = 0;
+  for(int i=0; i<NPROC; i++){
+    if(proc[i].state==RUNNABLE) {
+      if(!flag) {
+        min_vruntime = proc[i].vruntime;
+        min_runtime_p = &proc[i];
+        flag = 1;
+      } else {
+        if(proc[i].vruntime < min_vruntime) {
+          min_vruntime = proc[i].vruntime;
+          min_runtime_p = &proc[i];
+        }
+      }
+    }
+  }
+  return min_runtime_p;
 }
 
 // Implementation of Completely Fair Scheduler 
@@ -498,6 +522,8 @@ void cfs_scheduler(struct cpu *c) {
     //when the current process hasn’t used up its assigned timeslice and is still runnable
     //it should continue to run the next tick
     c->proc = cfs_current_proc;
+
+    // cfs_current_proc->runtime+=1;
   } else if(cfs_proc_timeslice_left == 0 || (cfs_current_proc != 0 && cfs_current_proc->state != RUNNABLE)){
     //when the current process has used up its timeslice or is not runnable
     //it should not be picked to run next and its vruntime should be updated
@@ -506,6 +532,11 @@ void cfs_scheduler(struct cpu *c) {
     //compute the increment of its vruntime according to CFS design
     if(inc<1) inc=1; //increment should be at least 1
     cfs_current_proc->vruntime += inc; //add the increment to vruntime
+    
+    // cfs_current_proc->runtime += 1;
+      //the number of ticks used gets added
+   //printf("vruntime(%d) and runtime(%d)\n", cfs_current_proc->vruntime, cfs_current_proc->runtime);
+    
     //to add: increment the process’ (actual) runtime
     //prints for testing and debugging purposes
     printf("[DEBUG CFS] Process %d used %d ticks of its assigned timeslice (totally %d ticks) and is swapped out!\n",
@@ -516,41 +547,59 @@ void cfs_scheduler(struct cpu *c) {
   }
   if(c->proc==0){//when the next process should be found
     //to add:
+    struct proc *shortest_rtime_p = shortest_runtime_proc();
     //(1) Call shortest_runtime_proc() to find the proc with the shorestest vruntime
-    //(2) If (1) returns a valid process, set up cfs_current_proc, cfs_proc_timeslice_len,
-    // cfs_proc_timeslice_left, and c->proc accordingly.
-    // Notes: according to CFS, a process is assigned with time slice of
-    // ceil(cfs_sched_latency * weight_of_this_process / weights_of_all_runnable_process)
-    // and the timeslice length should be in [cfs_min_timeslice, cfs_max_timeslice]
-    //(3) If (1) returns 0, do nothing.
-    if(c->proc > 0){
-      //prints for testing and debugging purposes
-      printf("[DEBUG CFS] Process %d will run for a timeslice of %d ticks next!\n",
-        c->proc->pid,
-        cfs_proc_timeslice_len);
-      //schedule c->process to run
-      acquire(&c->proc->lock);
-      c->proc->state=RUNNING;
-      swtch(&c->context, &c->proc->context);
-      release(&c->proc->lock);
+    if(shortest_rtime_p!=0) {
+      //(2) If (1) returns a valid process, set up cfs_current_proc, cfs_proc_timeslice_len,
+      // cfs_proc_timeslice_left, and c->proc accordingly.
+      // Notes: according to CFS, a process is assigned with time slice of
+      // ceil(cfs_sched_latency * weight_of_this_process / weights_of_all_runnable_process)
+      // and the timeslice length should be in [cfs_min_timeslice, cfs_max_timeslice]
+      cfs_current_proc = shortest_rtime_p;
+      int weight = nice_to_weight[cfs_current_proc->nice+20];
+      int timeslice_len = weight * cfs_sched_latency / weight_sum() + 1;
+      
+      if(timeslice_len > cfs_max_timeslice){
+        cfs_proc_timeslice_len = cfs_max_timeslice;
+      } else if(timeslice_len < cfs_min_timeslice){
+        cfs_proc_timeslice_len = cfs_min_timeslice;
+      } else {
+        cfs_proc_timeslice_len = timeslice_len;
+      }
+      cfs_proc_timeslice_left = cfs_proc_timeslice_len - cfs_current_proc->vruntime;
+      if(cfs_proc_timeslice_left < 0) cfs_proc_timeslice_left = 0;
+      c->proc = cfs_current_proc;
+
+      if(c->proc > 0){
+        //prints for testing and debugging purposes
+        printf("[DEBUG CFS] Process %d will run for a timeslice of %d ticks next!\n",
+          c->proc->pid,
+          cfs_proc_timeslice_len);
+          //schedule c->process to run
+          acquire(&c->proc->lock);
+          c->proc->state=RUNNING;
+          swtch(&c->context, &c->proc->context);
+          release(&c->proc->lock);
+      }
     }
+    //(3) If (1) returns 0, do nothing.
   }
 }
 
 //The original RR scheduler is moved to old_scheduler
 void
-old_scheduler(struct cpu *c) {
+old_scheduler(struct cpu *c)
+{
   struct proc *p;
   for(p = proc; p < &proc[NPROC]; p++) {
     acquire(&p->lock);
     if(p->state == RUNNABLE) {
-      // Switch to chosen process.  It is the process's job
+     // Switch to chosen process. It is the process's job
       // to release its lock and then reacquire it
       // before jumping back to us.
       p->state = RUNNING;
       c->proc = p;
       swtch(&c->context, &p->context);
-
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       c->proc = 0;

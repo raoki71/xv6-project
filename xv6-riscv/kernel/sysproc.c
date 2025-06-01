@@ -184,28 +184,52 @@ sys_gettraphistory(void) {
 // The handler for system call nice
 uint64
 sys_nice(void) {
-  // TO BE ADDED
-  return 0;
+  int n;
+  argint(0, &n);
+  struct proc *p = myproc();
+  if(n>=-19&&n<=20) {
+    p->nice = n;
+  }
+  return p->nice;
 }
 
 // The handler for system call getruntime
 uint64
 sys_getruntime(void) {
-  // TO BE ADDED
-  return 0;
+  uint64 rtarray;
+  int runtime, vruntime;
+  struct proc *p = myproc();
+  argaddr(0, &rtarray);
+  runtime = p->runtime;
+  vruntime = p->vruntime;
+  if(rtarray!= 0) {
+    if(copyout(p->pagetable, rtarray, (char*)&runtime, sizeof(runtime)) < 0 ||
+      copyout(p->pagetable, rtarray+sizeof(runtime), (char *)&vruntime, sizeof(vruntime)) < 0){
+      return -1;
+    }
+    return 0;
+  }
+  return -1;
 }
 
 // The handler for system call startcfs
 uint64
 sys_startcfs(void) {
-  // TO BE ADDED
-  return 0;
+  int latency, max, min;
+  argint(0, &latency);
+  argint(1, &max);
+  argint(2, &min);
+  cfs = 1;
+  cfs_sched_latency = latency;
+  cfs_max_timeslice = max;
+  cfs_min_timeslice = min;
+  return 1;
 }
 
 // The handler for system call stopcfs
 uint64
 sys_stopcfs(void) {
-  // TO BE ADDED
-  return 0;
+  cfs = 0;
+  return 1;
 }
 // <<< Project 1C

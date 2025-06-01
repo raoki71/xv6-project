@@ -194,89 +194,170 @@ In our implementation, all the four fields are assigned to corresponding virtual
 
 
 # Project 1C Documentation:
-This documentation contains three main notes: Kernel Side, User Side, and Implementation note. Kernel Side and User Side notes briefly explains what fields and variables (both local and global) are needed to include in files apart from the main implementation file (i.e. sysproc.c) so that the whole program runs properly. Therefore, these two notes contain describpitons similar to the ones stated in the project specification. If you need not to read them, please do skip to the Implemenation part which contains the major idea of the four newly added system call handlers.
+#### Learning Objective:
+<ins>To implement Completely Fair Scheduler (CFS) according to the design principles of Linux.</ins>
+
+As in Project 1B, it contains three main notes: Kernel Side, User Side, and Implementation note. Since Kernel Side and User Side notes contain descriptions similar to 1B, you can skip to Imepementation notes for your time disposal. There are four newly added system call handlers.
 
 ### Kernel Side
-In kernel/proc.h, important field values: (line: 114-116)
-  int nice;     // Each process is assigned a "nice" value, -20 to +19 (higher to lower priority, respectively)
-  int runtime;  // The actual runtime of the process (Unit: ticks)
-  int vruntime; // Each process accumulates its own virtual runtime to fairly divide a CPU evenly as opposed to a fixed time slice
+#### kernel/sysproc.c file
+  - Line 185-194: the handler for system call `nice`
+  
+        uint64 sys_nice(void)
+  - Line 197-213: the handler for system call `getruntime`
+  
+        uint64 sys_getruntime(void)
+  - Line 216-227: the handler for system call `startcfs`
+  
+        uint64 sys_startcfs(void)
+  - Line 230-234: the handler for system call `stopcfs`
+  
+        uint64 sys_stopcfs(void)
 
-In kernel/proc.c, freeproc function (line: 178-180),
-  Initialize the three fields to 0 whenever a new process is created.
+#### kernel/proc.h file
+Addition of fields necessary for CFS:
+- **nice value**: each process is assigned a "nice" value, -20 to +19 (higher to lower priority, respectively).
+- **run time**: the actual runtime of the process (Unit: 1 tick = 100ms).
+- **virtual runtime**: each process accumulates its own virtual runtime to divide a CPU evenly as opposed to a fixed time slice.
 
-  (line: 29?-32?) global or local to scheduler() ?
-  int cfs_sched_latency = 128; //default length of scheduling latency   //TO BE CHANGED
-  int cfs_max_timeslice = 16; //max number of ticks for a process per scheduling latency    //TO BE CHANGED
-  int cfs_min_timeslice = 1; //min number of ticks for a process per scheduling latency     //TO BE CHANGED
+    Line 114-116:
 
-  (line: 34-45)
-  The conversion from nice value to weight based on the nice value domains (-20 to 19).
-  Given a nice value x, it should be converted to the range of [0-39] in the array. So perform x+20 adjustment.
-  int nice_to_weight[40] = {...};
+        int nice;
+        int runtime;
+        int vruntime;
 
-  (line: 47-55) TO BE CHANGED
-  //indicate if the fair scheduler is the current scheduler, 0 is the default setting indicates that the current scheduler is the default RR scheduler 
-  //while 1 indicates the current scheduler is this fair scheduler
-  int cfs = 0;
-  //the process currently scheduled to run by the fair scheduler and is initialized to 0 meaning there is no such process
-  struct proc *cfs_current_proc=0;
-  //number of ticks assigned to the above (current) process if it exists
-  int cfs_proc_timeslice_len=0;
-  //number of ticks that the above process can still run if it exists
-  int cfs_proc_timeslice_left=0;
+  In `kernel/proc.c` at line 183, `freeproc()` function initializes the three fields to 0 whenever a new process is created.
+    
+    Line 206-208:
 
-  Helper function for a fair scheduler (line: 478-?):
-    int weight_sum() - TO BE ADDED
-    struct proc* shortest_runtime_proc() - TO BE ADDED
-
-    Implementation of Completely Fair Scheduler (line: 4??-???)
-    void cfs_scheduler(struct cpu *c) - TO BE ADDED
-    old_scheduler(struct cpu *c) - The original RR scheduler is moved to old_scheduler void
-    scheduler(void) - // TO BE CHANGED The scheduler runs the original RR scheduler (if cfs==0) or CFS (if cfs==1)
+        p->nice = 0;
+        p->runtime = 0;
+        p->vruntime = 0;
 
 ### User Side
-In user/syscall.h (line: 35-38)
-  SYS_nice            26
-  SYS_getruntime      27
-  SYS_startcfs        28
-  SYS_stopcfs         29
-In user/syscall.c (line: 113-116)
-  (line: 113-116) Prototypes for system call handlers
-  sys_nice(void);
-  sys_getruntime(void);
-  sys_startcfs(void);
-  sys_stopcfs(void);
-  (line: 149-152) Pointers to ... system call handlers in a syscall[] array
-  [SYS_nice] sys_nice,
-  [SYS_getruntime] sys_getruntime,
-  [SYS_startcfs] sys_startcfs,
-  [SYS_stopcfs] sys_stopcfs,
+#### user/syscall.h file
+Line 35-38:
 
-In user/usys.pl, (line: 47-50)
+    SYS_nice            26
+    SYS_getruntime      27
+    SYS_startcfs        28
+    SYS_stopcfs         29
+
+#### user/syscall.c (line: 113-116)
+- Addition of prototypes defined above
+
+    Line 113-116:
+
+        sys_nice(void); 
+        sys_getruntime(void);
+        sys_startcfs(void);
+        sys_stopcfs(void);
+
+- Addition of pointers to new system call handlers in the `*syscalls[]` array.
+
+    Line 149-152: 
+
+        [SYS_nice] sys_nice,
+        [SYS_getruntime] sys_getruntime,
+        [SYS_startcfs] sys_startcfs,
+        [SYS_stopcfs] sys_stopcfs,
+
+#### user/usys.pl file
+Addition of system call entires in Perl script file to generate the mapped system calls in an assembly language.
+
+Line: 47-50
+
     entry("nice");
     entry("getruntime");
     entry("startcfs");
     entry("stopcfs");
 
-In user/user.h, (line: 37-46) TO BE CHANGED
-    // If new_nice is between –20 and 19, the caller’s nice is set to new_nice. 
-    // Otherwise, the nice value is unchanged. The system returns the nice value (after update) of the caller.
+#### user/user.h file
+System call declarations which are function interfaces for user programs. Specifty aruments in here. Arguments are pushed to kernel stack and they are handled by `argaddr()` and `argint()`.
+
+Line 39-44:
+    
     int nice(int new_nice);
-    // This system call returns the caller’s actual runtime and virtual runtime to the integer variables pointed to by the arguments, respectively.
     int getruntime(int *runtime, int *vruntim);
-    // This system call starts the share scheduler by setting the variable cfs to 1 in proc.c. It also set the
-    // parameters cfs_sched_latency, cfs_max_timeslice and cfs_min_timeslice to the arguments, respectively. It returns 1.
     int startcfs(int latency, int max, int min);
-    // This system call stops the share scheduler by setting the variable cfs to 0 in proc.c. It returns 1.
     int stopcfs(void);
 
-In kernel/sysproc.c, (line: 183-???),
-  // The handler for system call nice
-  uint64 sys_nice(void)
-  // The handler for system call getruntime
-  uint64 sys_getruntime(void)
-  // The handler for system call startcfs
-  uint64 sys_startcfs(void)
-  // The handler for system call stopcfs
-  uint64 sys_stopcfs(void)
+### Implementation
+
+#### kernel/proc.c file
+- Addition of three important default values:
+    - **Latency**: length of scheduling latency
+    - **max timeslice**: the maximum number of ticks for a process per scheduling latency
+    - **min timeslice**: the minum number of ticks for a process per scheduling latency
+
+    Line 30-32:
+
+        int cfs_sched_latency = 128;
+        int cfs_max_timeslice = 16;
+        int cfs_min_timeslice = 1;
+
+- Define a mapping between nice values and weights. Given a nice value x, it should be converted to the range of `[0-39]` in the array. Perform x+20 adjustment.
+
+    Line 36-45:
+    
+        int nice_to_weight[40] = {
+            88761, 71755, 56483, 46273, 36291, /*for nice = -20, …, -16*/
+            29154, 23254, 18705, 14949, 11916, /*for nice = -15, …, -11*/
+            9548, 7620, 6100, 4904, 3906, /*for nice = -10, …, -6*/
+            3121, 2501, 1991, 1586, 1277, /*for nice = -5, …, -1*/
+            1024, 820, 655, 526, 423, /*for nice = 0, …, 4*/
+            335, 272, 215, 172, 137, /*for nice = 5, …, 9*/
+            110, 87, 70, 56, 45, /*for nice = 10, …, 14*/
+            36, 29, 23, 18, 15, /*for nice = 15, …, 19*/
+        };
+
+- Define another three variables for CFS:
+    - **cfs**: if the fair scheduler is the current scheduler, the default value (0) indicates that the current scheduler is Round-Robin (RR) scheduler; if the value is 1, the scheduler is CFS.
+    - **current process**: the process currently scheduled to run by the fair scheduler and is initialized to 0.
+    - **timeslice length**: the number of ticks assigned to the current process if it is already initialized.
+    - **timeslice** left: the number of remaing ticks allowed for the current process to run if it still exists.
+
+    Line 49-55:
+
+        int cfs = 0;
+        struct proc *cfs_current_proc=0;
+        int cfs_proc_timeslice_len=0;
+        int cfs_proc_timeslice_left=0;
+
+- Addition of helper functions for a fair scheduler:
+
+    - Compute the sum of the weights of all the `RUNNABLE` processes. Return the total weight sum.
+
+        Line 479-490:
+
+            int weight_sum()
+
+    - Find the `RUNNABLE` process that has the shortest virtual runtime. Return the minimum runtime.
+
+        Line 491-512:
+
+            struct proc* shortest_runtime_proc()
+
+- Implementation of Completely Fair Scheduler
+
+    Given a time slice left, it decides to continue running the current process or to swap to a new `RUNNABLE` process. The time slice is decremented by each tick and weight value based on the nice value computation. The actual runtime of CPU and the virtual runtime is incremented accordingly to keep track of the ticks it has accumulated. When it decides to swap the current proccess, it chooses a new process which has the shortest virtual runtime.
+
+    Line 515-587:
+
+        void cfs_scheduler(struct cpu *c)
+
+- Implementation of Round Robin Scheduler
+
+    RR simply chooses the shortest runtime process to achieve the overall shortest response time.
+
+    Line 590-609:
+
+        old_scheduler(struct cpu *c)
+    
+- Implementation of switching between two schedulers, CFS and RR:
+
+    The scheduler runs the original RR scheduler (if cfs==0) or CFS (if cfs==1).
+
+    Line 625-638:
+
+        scheduler(void)
